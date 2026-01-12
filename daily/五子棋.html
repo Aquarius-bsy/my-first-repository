@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>五子棋（浏览器版）</title>
+  <style>
+    html,body{height:100%;margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial}
+    .wrap{min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:18px;box-sizing:border-box;background:linear-gradient(180deg,#eef2f7,#f8fbff)}
+    .board-area{background:#fff;padding:14px;border-radius:12px;box-shadow:0 6px 24px rgba(12,20,40,0.08)}
+    canvas{display:block;cursor:crosshair;border-radius:8px}
+    .controls{margin-top:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    button{padding:8px 12px;border-radius:8px;border:1px solid #d0d7df;background:#fff;cursor:pointer}
+    .status{margin-left:8px;color:#333;font-weight:600}
+    .small{font-size:13px;color:#666}
+    label{display:inline-flex;align-items:center;gap:6px}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h2>五子棋（浏览器版）</h2>
+    <div class="board-area">
+      <canvas id="board" width="640" height="640"></canvas>
+      <div class="controls">
+        <button id="resetBtn">重置</button>
+        <button id="undoBtn">悔棋</button>
+        <label class="small"><input type="checkbox" id="showCoords"> 显示坐标</label>
+        <label class="small"><input type="checkbox" id="colorStones" checked> 彩色棋子</label>
+        <div class="status" id="status">轮到：黑子</div>
+      </div>
+    </div>
+    <p class="small" style="margin-top:10px;max-width:720px;text-align:center">点击棋盘下子。规则：五子连成一线即获胜（横竖斜）。支持悔棋、重置与高亮获胜路径。</p>
+  </div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('board');
+  const ctx = canvas.getContext('2d');
+  const size = 15; // 棋盘格数
+  const padding = 30; // 边距
+  const boardPixels = Math.min(canvas.width, canvas.height) - padding*2;
+  const cell = boardPixels / (size - 1);
+  const radius = Math.max(8, cell*0.36);
+
+  let board = Array.from({length:size}, () => Array(size).fill(0)); // 0空 1黑 2白
+  let current = 1; // 1黑先
+  let moves = [];
+  let gameOver = false;
+  const statusEl = document.getElementById('status');
+  const resetBtn = document.getElementById('resetBtn');
+  const undoBtn = document.getElementById('undoBtn');
+  const showCoords = document.getElementById('showCoords');
+  const colorStones = document.getElementById('colorStones');
+
+  function coordToPixel(i){
+    return padding + i * cell;
+  }
+
+  function drawBoard(){
+    // 背景
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.fillStyle = '#f4e9d6';
+    ctx.fillRect(padding-6,padding-6,boardPixels+12,boardPixels+12);
+
+    // 网格
+    ctx.strokeStyle = '#555';
+    ctx.lineWidth = 1;
+    for(let i=0;i<size;i++){
+      const p = coordToPixel(i);
+      ctx.beginPath();
+      ctx.moveTo(coordToPixel(0), p);
+      ctx.lineTo(coordToPixel(size-1), p);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(p, coordToPixel(0));
+      ctx.lineTo(p, coordToPixel(size-1));
+      ctx.stroke();
+    }
+
+    // 星位（15x15常见星位）
+    const star = [3,7,11];
+    for(const sx of star){
+      for(const sy of star){
+        const x = coordToPixel(sx), y = coordToPixel(sy);
+        ctx.beginPath(); ctx.fillStyle='#333'; ctx.arc(x,y,4,0,Math.PI*2); ctx.fill();
+      }
+    }
+
+    // 坐标
+    if(showCoords.checked){
+      ctx.fillStyle = '#222'; ctx.font = '12px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+      for(let i=0;i<size;i++){
+        const p = coordToPixel(i);
+        ctx.fillText(String.fromCharCode(65+i), p, padding-16); // A,B,C...
+        ctx.fillText((i+1).toString(), padding-16, p);
+      }
+    }
+
+    // 棋子
+    for(let y=0;y<size;y++){
+      for(let x=0;x<size;x++){
+        const v = board[y][x];
+        if(v===0) continue;
+        drawStone(x,y,v);
+      }
+    }
+  }
+
+  function drawStone(x,y,player){
+    const px = coordToPixel(x);
+    const py = coordToPixel(y);
+    const g = ctx.createRadialGradient(px - radius/3, py - radius/3, radius*0.1, px, py, radius);
+    if(player===1){
+      if(colorStones.checked){
+        // 深灰偏黑
+        g.addColorStop(0, '#111'); g.addColorStop(1, '#000');
+      } else {
+        g.addColorStop(0,'#333'); g.addColorStop(1,'#000');
+      }
+    } else {
+      if(colorStones.checked){
+        g.addColorStop(0,'#fff'); g.addColorStop(1,'#d9efff');
+      } else {
+        g.addColorStop(0,'#fff'); g.addColorStop(1,'#ddd');
+      }
+    }
+    ctx.beginPath(); ctx.fillStyle = g; ctx.arc(px,py,radius,0,Math.PI*2); ctx.fill();
+    // 外圈高光
+    ctx.beginPath(); ctx.strokeStyle='rgba(0,0,0,0.15)'; ctx.lineWidth=1; ctx.arc(px,py,radius,0,Math.PI*2); ctx.stroke();
+  }
+
+  function pixelToCoord(px,py){
+    // find nearest grid
+    const rx = Math.round((px - padding)/cell);
+    const ry = Math.round((py - padding)/cell);
+    if(rx<0||rx>=size||ry<0||ry>=size) return null;
+    return {x:rx,y:ry};
+  }
+
+  function placeAt(x,y){
+    if(gameOver) return false;
+    if(board[y][x] !== 0) return false;
+    board[y][x] = current;
+    moves.push({x,y,player:current});
+    const win = checkWin(x,y,current);
+    if(win){
+      gameOver = true;
+      highlightWin(win.line);
+      statusEl.textContent = (current===1? '黑子':'白子') + ' 获胜！';
+    } else {
+      current = 3 - current; // 切换
+      statusEl.textContent = '轮到：' + (current===1? '黑子' : '白子');
+    }
+    drawBoard();
+    return true;
+  }
+
+  function checkWin(x,y,player){
+    // 检查四个方向
+    const dirs = [[1,0],[0,1],[1,1],[1,-1]];
+    for(const [dx,dy] of dirs){
+      let count = 1;
+      const line = [{x,y}];
+      // 前向
+      let nx = x+dx, ny = y+dy;
+      while(nx>=0 && nx<size && ny>=0 && ny<size && board[ny][nx]===player){ line.push({x:nx,y:ny}); count++; nx+=dx; ny+=dy; }
+      // 反向
+      nx = x-dx; ny = y-dy;
+      while(nx>=0 && nx<size && ny>=0 && ny<size && board[ny][nx]===player){ line.unshift({x:nx,y:ny}); count++; nx-=dx; ny-=dy; }
+      if(count>=5) return {player,line};
+    }
+    return null;
+  }
+
+  function highlightWin(line){
+    // 在绘制时额外高亮
+    drawBoard();
+    ctx.save();
+    ctx.lineWidth = 6; ctx.strokeStyle = 'rgba(255,0,0,0.75)'; ctx.lineCap='round';
+    const a = line[0], b = line[line.length-1];
+    ctx.beginPath(); ctx.moveTo(coordToPixel(a.x), coordToPixel(a.y)); ctx.lineTo(coordToPixel(b.x), coordToPixel(b.y)); ctx.stroke();
+    ctx.restore();
+    // 再把棋子重绘以在高亮线上有棋子覆盖
+    for(const p of line) drawStone(p.x,p.y, board[p.y][p.x]);
+  }
+
+  // 事件
+  canvas.addEventListener('click', (e) => {
+    const r = canvas.getBoundingClientRect();
+    const x = e.clientX - r.left; const y = e.clientY - r.top;
+    const c = pixelToCoord(x,y);
+    if(!c) return;
+    placeAt(c.x,c.y);
+  });
+
+  // 支持鼠标移动提示
+  canvas.addEventListener('mousemove', (e) => {
+    const r = canvas.getBoundingClientRect();
+    const x = e.clientX - r.left; const y = e.clientY - r.top;
+    const c = pixelToCoord(x,y);
+    drawBoard();
+    if(c && board[c.y][c.x]===0 && !gameOver){
+      // 半透明提示子
+      ctx.globalAlpha = 0.6; drawStone(c.x,c.y,current); ctx.globalAlpha = 1;
+    }
+  });
+
+  resetBtn.addEventListener('click', () => {
+    board = Array.from({length:size}, () => Array(size).fill(0));
+    current = 1; moves = []; gameOver=false; statusEl.textContent='轮到：黑子'; drawBoard();
+  });
+
+  undoBtn.addEventListener('click', () => {
+    if(moves.length===0 || gameOver) return;
+    const last = moves.pop();
+    board[last.y][last.x] = 0;
+    current = last.player; // 回到上一个下子者
+    statusEl.textContent = '轮到：' + (current===1? '黑子' : '白子');
+    drawBoard();
+  });
+
+  showCoords.addEventListener('change', drawBoard);
+  colorStones.addEventListener('change', drawBoard);
+
+  // 初始化
+  drawBoard();
+
+  // 小说明：若要在不同设备上自适应大小，可将 canvas 的 width/height 用 JS 动态设置为 container 大小。
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,77 @@
+{
+  "options": {
+    "env": {
+      "Path": "C:\\Users\\aquar\\Downloads\\mingw64\\bin;${env:Path}"
+    }
+  },
+  "tasks": [
+    {
+      "args": [
+        "-g",
+        "${file}",
+        "-o",
+        "${fileDirname}\\${fileBasenameNoExtension}.exe",
+        "-std=c++23"
+      ],
+      "command": "C:\\Users\\aquar\\Downloads\\mingw64\\bin\\g++.exe",
+      "group": "build",
+      "label": "single file build",
+      "presentation": {
+        "clear": true,
+        "echo": false,
+        "focus": false,
+        "panel": "shared",
+        "reveal": "silent",
+        "showReuseMessage": false
+      },
+      "problemMatcher": "$gcc",
+      "type": "process"
+    },
+    {
+      "args": [],
+      "command": "${fileDirname}\\${fileBasenameNoExtension}.exe",
+      "dependsOn": "single file build",
+      "label": "run and pause",
+      "options": {
+        "cwd": "${fileDirname}",
+        "env": {
+          "Path": "C:\\Users\\aquar\\Downloads\\mingw64\\bin;${env:Path}"
+        }
+      },
+      "presentation": {
+        "clear": true,
+        "echo": false,
+        "focus": false,
+        "panel": "shared",
+        "reveal": "never",
+        "showReuseMessage": false
+      },
+      "problemMatcher": [],
+      "type": "pause-console"
+    },
+    {
+      "type": "cppbuild",
+      "label": "C/C++: g++.exe 生成活动文件",
+      "command": "C:\\Users\\aquar\\Downloads\\mingw64\\bin\\g++.exe",
+      "args": [
+        "-fdiagnostics-color=always",
+        "-g",
+        "${file}",
+        "-o",
+        "${fileDirname}\\${fileBasenameNoExtension}.exe"
+      ],
+      "options": {
+        "cwd": "${fileDirname}"
+      },
+      "problemMatcher": [
+        "$gcc"
+      ],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "detail": "编译器: C:\\Users\\aquar\\Downloads\\mingw64\\bin\\g++.exe"
+    }
+  ],
+  "version": "2.0.0"
+}
